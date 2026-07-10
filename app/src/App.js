@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import Pusher from 'pusher-js';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -12,11 +13,54 @@ function App() {
   const [imagePreview, setImagePreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Search states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
 
   useEffect(() => {
     fetchMessages();
+  }, []);
+
+  // Set up Pusher real-time listeners
+  useEffect(() => {
+    const pusherKey = process.env.REACT_APP_PUSHER_KEY;
+    const pusherCluster = process.env.REACT_APP_PUSHER_CLUSTER;
+
+    if (!pusherKey || !pusherCluster) {
+      console.log('Pusher credentials not found. Real-time updates disabled.');
+      return;
+    }
+
+    const pusher = new Pusher(pusherKey, {
+      cluster: pusherCluster
+    });
+
+    const channel = pusher.subscribe('chat-channel');
+
+    channel.bind('new-message', (newMessage) => {
+      setMessages((prev) => {
+        if (prev.some((msg) => msg.id === newMessage.id)) return prev;
+        return [...prev, newMessage];
+      });
+    });
+
+    channel.bind('message-deleted', (data) => {
+      setMessages((prev) => prev.filter((msg) => msg.id !== data.id));
+      setSearchResults((prev) => prev.filter((msg) => msg.id !== data.id));
+    });
+
+    return () => {
+      channel.unbind_all();
+      channel.unsubscribe();
+      pusher.disconnect();
+    };
   }, []);
 
   // Auto-scroll to bottom when new messages arrive
@@ -40,6 +84,37 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (!value.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchLoading(true);
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await axios.get(
+          `${API_BASE_URL}/api/messages/search?q=${encodeURIComponent(value.trim())}`
+        );
+        setSearchResults(response.data.messages || []);
+      } catch (err) {
+        console.error('Search request failed:', err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
   };
 
   const handleImageSelect = (e) => {
@@ -139,6 +214,7 @@ function App() {
     try {
       await axios.delete(`${API_BASE_URL}/api/messages/${messageId}`);
       setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+      setSearchResults((prev) => prev.filter((msg) => msg.id !== messageId));
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to delete message');
       console.error('Error deleting message:', err);
@@ -150,6 +226,8 @@ function App() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const displayedMessages = isSearching ? searchResults : messages;
+
   return (
     <div className="App">
       <header className="App-header">
@@ -158,15 +236,29 @@ function App() {
       </header>
 
       <main className="chat-container">
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="🔍 Search messages or users..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+          />
+          {isSearching && (
+            <span className="search-status">
+              {searchLoading ? 'Searching...' : `${searchResults.length} result(s) found`}
+            </span>
+          )}
+        </div>
+
         <div className="chat-messages" id="messages-container">
-          {loading && messages.length === 0 ? (
+          {loading && displayedMessages.length === 0 ? (
             <div className="loading">Loading messages...</div>
-          ) : messages.length === 0 ? (
+          ) : displayedMessages.length === 0 ? (
             <div className="no-messages">
-              No messages yet. Start the conversation!
+              {isSearching ? 'No matching messages found.' : 'No messages yet. Start the conversation!'}
             </div>
           ) : (
-            messages.map((msg) => (
+            displayedMessages.map((msg) => (
               <div key={msg.id} className="message-item">
                 <div className="message-header">
                   <span className="message-username">{msg.username}</span>

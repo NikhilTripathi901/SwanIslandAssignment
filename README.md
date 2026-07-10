@@ -1,55 +1,71 @@
-<<<<<<< HEAD
-# Test Project
+# Real-Time Chat & Search Assessment
 
-## Repository Layout
-- `api/` – Express backend (messages, file uploads)
-- `app/` – React frontend scaffold
+I have completed both challenges for this assessment. Below is a summary of the implementations and instructions on how to set up and test the project.
 
-## Prerequisites
-- Node.js 22+
-- pnpm (recommended) or npm
+## Completed Challenges
 
-## Quick Start
-```bash
-# backend
-cd api
-cp env.example .env     # set Pusher credentials (optional)
-pnpm install
-pnpm dev                # starts on http://localhost:3001
+### 1. Real-Time Messages with Pusher
+- **Backend**: Integrated the official `pusher` SDK. The text message and image-upload routes now broadcast a `new-message` event to the `chat-channel`. Deletions trigger a `message-deleted` event containing the message ID.
+- **Frontend**: Configured the React app with `pusher-js` to listen for these events. The message feed automatically appends new messages (with duplicate checks for the sender) and removes deleted messages in real-time.
+- **Graceful Fallback**: If Pusher environment variables are not set, the app logs a warning but continues to function normally using standard HTTP requests.
 
-# frontend
-cd ../app
-cp env.example .env     # set Pusher credentials (optional)
-pnpm install
-pnpm dev                # starts on http://localhost:3000
+### 2. Message Search & Real-Time Filter
+- **Backend Endpoint**: Implemented `GET /api/messages/search?q=term`. It validates the query parameter, trims it, performs a case-insensitive search across usernames and message bodies, and returns up to 100 of the newest matches.
+- **Frontend UI & Debounce**: Added a search bar above the message feed. Typing triggers the search endpoint with a `300ms` debounce to prevent overloading the backend.
+- **Feed Toggle & Live Sync**: Clearing the search query instantly reverts the UI to the live feed. If a message is deleted while in search mode, it is immediately removed from the search results in real-time.
+
+---
+
+## Setup & Running the App
+
+### Prerequisites
+- Node.js 18+ (Node 22+ recommended)
+- `pnpm` (recommended) or `npm` / `yarn`
+
+### 1. Environment Variables
+
+Before running, you need to configure Pusher credentials. Copy the example environment files in both folders:
+
+**Backend (`api/.env`)**:
+```env
+PORT=3001
+PUSHER_APP_ID=your_pusher_app_id
+PUSHER_KEY=your_pusher_key
+PUSHER_SECRET=your_pusher_secret
+PUSHER_CLUSTER=your_pusher_cluster
 ```
 
-**Note:** No database setup required! The app uses in-memory storage for messages. Messages will be lost on server restart, but file uploads persist.
+**Frontend (`app/.env`)**:
+```env
+REACT_APP_API_URL=http://localhost:3001
+REACT_APP_PUSHER_KEY=your_pusher_key
+REACT_APP_PUSHER_CLUSTER=your_pusher_cluster
+```
 
-## Simple Challenges
+### 2. Running Locally
 
-1) **Real-time messages with Pusher (backend + frontend)**  
-   - Wire up Pusher on the backend to publish `new-message` and `message-deleted` events when messages are created/deleted.  
-   - On the frontend, initialize Pusher and subscribe to the same channel/events to live-update the message list (append on new-message, remove on message-deleted).  
-   - Add `.env` entries for Pusher keys (backend + frontend) and document how to run with them.
+Start the backend and frontend in separate terminals:
 
-2) **Message search endpoint + realtime filter (backend + frontend)**  
-   - Add `GET /api/messages/search?q=term` (case-insensitive, newest first, non-empty `q`, max 100 results).  
-   - Add a search input in the UI that hits this endpoint with a 300ms debounce and shows loading/empty states.  
-   - When not searching, keep showing the live Pusher-powered feed from Challenge 1; when searching, show filtered results without breaking realtime updates once the search is cleared.
+**Backend Setup**:
+```bash
+cd api
+pnpm install
+pnpm dev # starts on http://localhost:3001
+```
 
-## Submission Guidelines
+**Frontend Setup**:
+```bash
+cd app
+pnpm install
+pnpm dev # starts on http://localhost:3000
+```
 
-After completing your challenges:
+---
 
-1. **Update README**: Document which challenges you completed and any additional setup required
-2. **Submit Your Work**:
-   - Add this repository to your GitHub account
-   - Send an email back with the repository link
-   - We will review your submission and get back to you
+## Verification
 
-**Important Notes:**
-- **No AI Tools**: Please do not use AI tools like ChatGPT or Copilot for this assessment. We want to evaluate your own coding abilities and problem-solving skills.
-=======
-# react-node-test-assessment
->>>>>>> 94225b19fc2863d1403687fb12d940baa48775ce
+To verify the real-time functionality:
+1. Open `http://localhost:3000` in two separate browser windows.
+2. Send a message in one window; it will instantly appear in the other without a page refresh.
+3. Delete a message; it will immediately disappear from both windows.
+4. Type a query in the search bar to test the debounced filtering, and verify that deletions also apply to the active search results.
