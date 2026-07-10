@@ -3,6 +3,20 @@ const router = express.Router();
 const Message = require('../models/Message');
 const upload = require('../middleware/upload');
 const path = require('path');
+const Pusher = require('pusher');
+
+// Initialize Pusher if variables are configured
+let pusher;
+if (process.env.PUSHER_APP_ID && process.env.PUSHER_KEY && process.env.PUSHER_SECRET) {
+  pusher = new Pusher({
+    appId: process.env.PUSHER_APP_ID,
+    key: process.env.PUSHER_KEY,
+    secret: process.env.PUSHER_SECRET,
+    cluster: process.env.PUSHER_CLUSTER || 'us2',
+    useTLS: true
+  });
+}
+
 
 // Get all messages
 router.get('/', async (req, res) => {
@@ -39,6 +53,12 @@ router.post('/', async (req, res) => {
 
     const newMessage = await Message.create(username, message.trim());
 
+    if (pusher) {
+      pusher.trigger('chat-channel', 'new-message', newMessage).catch(err => {
+        console.error('Failed to trigger Pusher new-message event:', err);
+      });
+    }
+
     res.status(201).json({ success: true, message: newMessage });
   } catch (error) {
     console.error('Error creating message:', error);
@@ -71,6 +91,12 @@ router.post('/with-image', upload.single('image'), async (req, res) => {
 
     const newMessage = await Message.create(username, messageText, imageUrl);
 
+    if (pusher) {
+      pusher.trigger('chat-channel', 'new-message', newMessage).catch(err => {
+        console.error('Failed to trigger Pusher new-message event:', err);
+      });
+    }
+
     res.status(201).json({ success: true, message: newMessage });
   } catch (error) {
     console.error('Error creating message with image:', error);
@@ -88,6 +114,26 @@ router.post('/with-image', upload.single('image'), async (req, res) => {
       success: false, 
       error: error.message || 'Failed to create message with image' 
     });
+  }
+});
+
+// Search messages
+router.get('/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || !q.trim()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Search query is required' 
+      });
+    }
+
+    const results = await Message.search(q.trim());
+    res.json({ success: true, messages: results });
+  } catch (error) {
+    console.error('Search failed:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -119,6 +165,12 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ 
         success: false, 
         error: 'Message not found' 
+      });
+    }
+
+    if (pusher) {
+      pusher.trigger('chat-channel', 'message-deleted', { id: req.params.id }).catch(err => {
+        console.error('Failed to trigger Pusher message-deleted event:', err);
       });
     }
 
